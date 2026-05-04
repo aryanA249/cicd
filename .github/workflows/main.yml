@@ -54,7 +54,9 @@ jobs:
         run: |
           echo "=== BANDIT SECURITY SCAN - FULL REPORT ===" >> $GITHUB_STEP_SUMMARY
           bandit -r . -f json -o bandit-report.json || true
+          bandit -r . -f html -o bandit-report.html || true
           bandit -r . -f txt
+          echo "HTML report generated: bandit-report.html" >> $GITHUB_STEP_SUMMARY
           echo "✓ Full Bandit scan completed" >> $GITHUB_STEP_SUMMARY
 
       # Step 6: Run Bandit with strict settings (HIGH severity only)
@@ -98,7 +100,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: bandit-security-report
-          path: bandit-report.json
+          path: |
+            bandit-report.json
+            bandit-report.html
           retention-days: 30
 
       # Step 9: Fail workflow if high-severity issues found
