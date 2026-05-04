@@ -95,7 +95,7 @@ jobs:
       # Makes the full report available for download from GitHub Actions UI
       - name: Upload Bandit Report
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: bandit-security-report
           path: bandit-report.json
