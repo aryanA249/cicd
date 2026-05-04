@@ -54,9 +54,249 @@ jobs:
         run: |
           echo "=== BANDIT SECURITY SCAN - FULL REPORT ===" >> $GITHUB_STEP_SUMMARY
           bandit -r . -f json -o bandit-report.json || true
-          bandit -r . -f html -o bandit-report.html || true
           bandit -r . -f txt
-          echo "HTML report generated: bandit-report.html" >> $GITHUB_STEP_SUMMARY
+          python3 - <<'PY'
+          import json
+          from datetime import datetime
+          from html import escape
+
+          with open('bandit-report.json', encoding='utf-8') as file_handle:
+              report = json.load(file_handle)
+
+          results = report.get('results', [])
+          metrics = report.get('metrics', {})
+          loc = metrics.get('_totals', {}).get('loc', 0)
+          issues = len(results)
+          high = sum(1 for issue in results if issue.get('issue_severity') == 'HIGH')
+          medium = sum(1 for issue in results if issue.get('issue_severity') == 'MEDIUM')
+          low = sum(1 for issue in results if issue.get('issue_severity') == 'LOW')
+
+          rows = []
+          for issue in results:
+              rows.append(
+                  f"""
+                  <article class=\"issue-card severity-{escape(issue.get('issue_severity', '').lower())}\">
+                    <div class=\"issue-header\">
+                      <span class=\"severity-badge\">{escape(issue.get('issue_severity', 'UNKNOWN'))}</span>
+                      <span class=\"issue-test\">{escape(issue.get('test_name', 'Unknown test'))}</span>
+                    </div>
+                    <p class=\"issue-text\">{escape(issue.get('issue_text', 'No description available.'))}</p>
+                    <dl class=\"issue-meta\">
+                      <div><dt>File</dt><dd>{escape(issue.get('filename', 'Unknown'))}</dd></div>
+                      <div><dt>Line</dt><dd>{escape(str(issue.get('line_number', 'N/A')))}</dd></div>
+                      <div><dt>Confidence</dt><dd>{escape(issue.get('issue_confidence', 'UNKNOWN'))}</dd></div>
+                    </dl>
+                  </article>
+                  """
+              )
+
+          issue_markup = '\n'.join(rows) if rows else '<div class="empty-state">No vulnerabilities detected. The Bebop crew can stand down.</div>'
+          generated_at = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
+
+          html = f"""<!doctype html>
+          <html lang=\"en\">
+          <head>
+            <meta charset=\"utf-8\" />
+            <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+            <title>Bandit Security Report</title>
+            <style>
+              :root {{
+                color-scheme: dark;
+                --bg: #070a12;
+                --panel: rgba(17, 22, 36, 0.9);
+                --panel-strong: #0d1220;
+                --line: rgba(255, 189, 87, 0.18);
+                --text: #f4efe6;
+                --muted: #a9b0c0;
+                --accent: #ffb74d;
+                --accent-2: #ff6b4a;
+                --good: #4dd4ac;
+                --low: #ffd166;
+                --medium: #ff9f43;
+                --high: #ff5d5d;
+                --shadow: 0 18px 60px rgba(0, 0, 0, 0.45);
+              }}
+
+              * {{ box-sizing: border-box; }}
+              body {{
+                margin: 0;
+                min-height: 100vh;
+                font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+                background:
+                  radial-gradient(circle at top left, rgba(255, 183, 77, 0.16), transparent 32%),
+                  radial-gradient(circle at 85% 15%, rgba(255, 107, 74, 0.12), transparent 24%),
+                  linear-gradient(135deg, #04050a 0%, #0a1020 52%, #141a2c 100%);
+                color: var(--text);
+              }}
+
+              .noise {{
+                position: fixed;
+                inset: 0;
+                pointer-events: none;
+                background-image: linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+                background-size: 28px 28px;
+                mix-blend-mode: screen;
+                opacity: 0.18;
+              }}
+
+              .wrap {{ max-width: 1180px; margin: 0 auto; padding: 40px 20px 64px; position: relative; z-index: 1; }}
+              .hero {{
+                display: grid;
+                gap: 18px;
+                padding: 28px;
+                margin-bottom: 28px;
+                border: 1px solid var(--line);
+                border-radius: 24px;
+                background: linear-gradient(180deg, rgba(18,24,38,0.92), rgba(10,14,24,0.88));
+                box-shadow: var(--shadow);
+                overflow: hidden;
+                position: relative;
+              }}
+
+              .hero::after {{
+                content: "";
+                position: absolute;
+                inset: auto -20% -60% auto;
+                width: 360px;
+                height: 360px;
+                background: radial-gradient(circle, rgba(255,183,77,0.16), transparent 68%);
+                transform: rotate(-12deg);
+              }}
+
+              .eyebrow {{
+                text-transform: uppercase;
+                letter-spacing: 0.35em;
+                font-size: 0.75rem;
+                color: var(--accent);
+              }}
+
+              h1 {{ margin: 0; font-size: clamp(2rem, 4vw, 4.4rem); line-height: 0.95; letter-spacing: -0.04em; }}
+              .sub {{ max-width: 820px; color: var(--muted); font-size: 1rem; line-height: 1.7; }}
+
+              .stats {{
+                display: grid;
+                grid-template-columns: repeat(5, minmax(0, 1fr));
+                gap: 14px;
+              }}
+
+              .stat {{
+                padding: 16px;
+                border-radius: 18px;
+                background: rgba(255,255,255,0.03);
+                border: 1px solid rgba(255,255,255,0.07);
+              }}
+
+              .stat span {{ display: block; color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.14em; }}
+              .stat strong {{ display: block; margin-top: 8px; font-size: 1.5rem; }}
+
+              .section-title {{
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                margin: 32px 4px 14px;
+                gap: 12px;
+              }}
+
+              .section-title h2 {{ margin: 0; font-size: 1.1rem; letter-spacing: 0.16em; text-transform: uppercase; }}
+              .timestamp {{ color: var(--muted); font-size: 0.85rem; }}
+
+              .issues {{ display: grid; gap: 16px; }}
+              .issue-card {{
+                padding: 18px 18px 16px;
+                border-radius: 20px;
+                background: linear-gradient(180deg, rgba(18,24,38,0.94), rgba(13,17,28,0.95));
+                border: 1px solid rgba(255,255,255,0.08);
+                box-shadow: 0 12px 30px rgba(0,0,0,0.24);
+              }}
+
+              .issue-header {{ display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 10px; }}
+              .severity-badge {{
+                display: inline-flex;
+                align-items: center;
+                padding: 6px 10px;
+                border-radius: 999px;
+                font-size: 0.74rem;
+                font-weight: 700;
+                letter-spacing: 0.12em;
+              }}
+
+              .severity-high .severity-badge {{ background: rgba(255, 93, 93, 0.16); color: #ff8a8a; }}
+              .severity-medium .severity-badge {{ background: rgba(255, 159, 67, 0.16); color: #ffc07a; }}
+              .severity-low .severity-badge {{ background: rgba(255, 209, 102, 0.16); color: #ffe1a1; }}
+              .severity-unknown .severity-badge {{ background: rgba(255,255,255,0.08); color: var(--muted); }}
+
+              .issue-test {{ font-size: 1rem; font-weight: 700; }}
+              .issue-text {{ margin: 0 0 14px; color: var(--text); line-height: 1.6; }}
+
+              .issue-meta {{
+                display: grid;
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                gap: 10px 16px;
+                margin: 0;
+              }}
+
+              .issue-meta div {{
+                padding: 12px;
+                border-radius: 14px;
+                background: rgba(255,255,255,0.03);
+                border: 1px solid rgba(255,255,255,0.06);
+              }}
+
+              .issue-meta dt {{ color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.14em; }}
+              .issue-meta dd {{ margin: 8px 0 0; word-break: break-word; }}
+
+              .empty-state {{
+                padding: 28px;
+                border-radius: 20px;
+                text-align: center;
+                background: rgba(77, 212, 172, 0.08);
+                border: 1px solid rgba(77, 212, 172, 0.22);
+                color: #dffbf2;
+              }}
+
+              @media (max-width: 860px) {{
+                .stats, .issue-meta {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
+              }}
+
+              @media (max-width: 640px) {{
+                .wrap {{ padding-inline: 14px; }}
+                .hero {{ padding: 20px; }}
+                .stats, .issue-meta {{ grid-template-columns: 1fr; }}
+              }}
+            </style>
+          </head>
+          <body>
+            <div class="noise"></div>
+            <main class="wrap">
+              <section class="hero">
+                <div class="eyebrow">Rust Red Dawn / Security Report</div>
+                <h1>Bandit Security Report</h1>
+                <p class="sub">A noir-styled security briefing inspired by Cowboy Bebop: neon contrast, space-jazz mood, and a sharp crew-deck interface for tracking findings without the plain default report.</p>
+                <div class="stats">
+                  <div class="stat"><span>Findings</span><strong>{issues}</strong></div>
+                  <div class="stat"><span>High</span><strong>{high}</strong></div>
+                  <div class="stat"><span>Medium</span><strong>{medium}</strong></div>
+                  <div class="stat"><span>Low</span><strong>{low}</strong></div>
+                  <div class="stat"><span>LOC</span><strong>{loc}</strong></div>
+                </div>
+              </section>
+
+              <div class="section-title">
+                <h2>Threat Log</h2>
+                <div class="timestamp">Generated {generated_at}</div>
+              </div>
+
+              <section class="issues">
+                {issue_markup}
+              </section>
+            </main>
+          </body>
+          </html>"""
+
+          with open('bandit-report.html', 'w', encoding='utf-8') as file_handle:
+              file_handle.write(html)
+          print('Custom Bebop-themed HTML report generated: bandit-report.html')
+          PY
           echo "✓ Full Bandit scan completed" >> $GITHUB_STEP_SUMMARY
 
       # Step 6: Run Bandit with strict settings (HIGH severity only)
