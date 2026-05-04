@@ -39,7 +39,8 @@ jobs:
       # Step 3: Display Python version
       # Verification step to confirm correct Python version
       - name: Display Python version
-        run: python -c "import sys; print(f'Python version: {sys.version}')"
+        run: |
+          python -c "import sys; print(f'Python version: {sys.version}')"
 
       # Step 4: Install Bandit (Python SAST Security Tool)
       # Bandit scans Python code for common security issues
